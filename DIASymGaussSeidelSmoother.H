@@ -10,8 +10,8 @@ SourceFiles
     DIAGaussSeidelSmoother.C
 \*---------------------------------------------------------------------------*/
 
-#ifndef DIAGaussSeidelSmoother_H
-#define DIAGaussSeidelSmoother_H
+#ifndef DIASymGaussSeidelSmoother_H
+#define DIASymGaussSeidelSmoother_H
 
 #include "doubleScalar.H"
 #include "lduMatrix.H"
@@ -23,7 +23,7 @@ namespace Foam
                          Class DIAGaussSeidelSmoother Declaration
     \*---------------------------------------------------------------------------*/
 
-    class DIAGaussSeidelSmoother : public lduMatrix::smoother
+    class DIASymGaussSeidelSmoother : public lduMatrix::smoother
     {
     private:
         bool structuredMesh_;
@@ -42,12 +42,12 @@ namespace Foam
         scalarField upperCoeffFieldK_;
 
     public:
-        TypeName("DIAGaussSeidel");
+        TypeName("DIASymGaussSeidel");
 
         // Constructors
 
         //- Construct from components
-        DIAGaussSeidelSmoother(
+        DIASymGaussSeidelSmoother(
             const word &fieldName,
             const lduMatrix &matrix,
             const FieldField<Field, scalar> &interfaceBouCoeffs,
