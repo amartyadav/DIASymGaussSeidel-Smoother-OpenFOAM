@@ -22,11 +22,35 @@ License
     along with OpenFOAM.  If not, see <http://www.gnu.org/licenses/>.
 
 \*---------------------------------------------------------------------------*/
+#ifdef LIKWID_PERFMON
+#include <likwid-marker.h>
+#else
+#define LIKWID_MARKER_INIT
+#define LIKWID_MARKER_THREADINIT
+#define LIKWID_MARKER_START(a)
+#define LIKWID_MARKER_STOP(a)
+#define LIKWID_MARKER_CLOSE
+#endif
+
+#ifdef LIKWID_PERFMON
+__attribute__((constructor)) static void likwid_init_wrapper()
+{
+    LIKWID_MARKER_INIT;
+    LIKWID_MARKER_THREADINIT;
+    LIKWID_MARKER_REGISTER("DIASYMsweep");
+}
+
+__attribute__((destructor)) static void likwid_close_wrapper()
+{
+    LIKWID_MARKER_CLOSE;
+}
+#endif
 
 #include "DIASymGaussSeidelSmoother.H"
 #include <set>
 #include <vector>
 #include "symGaussSeidelSmoother.H"
+#include <chrono>
 
 // * * * * * * * * * * * * * * Static Data Members * * * * * * * * * * * * * //
 
@@ -194,25 +218,29 @@ Foam::DIASymGaussSeidelSmoother::DIASymGaussSeidelSmoother(
 
     useDIA_ = structuredMesh_ && !matrix.asymmetric();
     // useDIA_ = structuredMesh_ && !matrix.asymmetric() && (Nz_ > 1);
+
     if (useDIA_)
     {
-        if (allUniform)
+        if (debug)
         {
-            Info << "DIASymGaussSeidel: fast path enabled (uniform coefficients),  Nx=" << Nx_
-                 << " Ny=" << Ny_ << " Nz=" << Nz_
-                 << " upperCoeffs=(" << upperCoeffI_
-                 << ", " << upperCoeffJ_
-                 << ", " << upperCoeffK_ << ")"
-                 << " (nCells=" << nCells << ")" << endl;
-        }
-        else
-        {
-            Info << "DIASymGaussSeidel: fast path enabled (variable coefficients),  Nx=" << Nx_
-                 << " Ny=" << Ny_ << " Nz=" << Nz_
-                 << " upperCoeffs=(" << upperCoeffI_
-                 << ", " << upperCoeffJ_
-                 << ", " << upperCoeffK_ << ")"
-                 << " (nCells=" << nCells << ")" << endl;
+            if (allUniform)
+            {
+                Info << "DIASymGaussSeidel: fast path enabled (uniform coefficients),  Nx=" << Nx_
+                     << " Ny=" << Ny_ << " Nz=" << Nz_
+                     << " upperCoeffs=(" << upperCoeffI_
+                     << ", " << upperCoeffJ_
+                     << ", " << upperCoeffK_ << ")"
+                     << " (nCells=" << nCells << ")" << endl;
+            }
+            else
+            {
+                Info << "DIASymGaussSeidel: fast path enabled (variable coefficients),  Nx=" << Nx_
+                     << " Ny=" << Ny_ << " Nz=" << Nz_
+                     << " upperCoeffs=(" << upperCoeffI_
+                     << ", " << upperCoeffJ_
+                     << ", " << upperCoeffK_ << ")"
+                     << " (nCells=" << nCells << ")" << endl;
+            }
         }
 
         // initialising coefficient field
@@ -248,35 +276,44 @@ Foam::DIASymGaussSeidelSmoother::DIASymGaussSeidelSmoother(
     }
     else if (!structuredMesh_)
     {
-        Info << "DIASymGaussSeidel: mesh not structured, falling back (nCells="
-             << nCells << ")" << endl;
+        if (debug)
+        {
+            Info << "DIASymGaussSeidel: mesh not structured, falling back (nCells="
+                 << nCells << ")" << endl;
+        }
     }
     else if (matrix_.asymmetric())
     {
-        Info << "DIASymGaussSeidel: asymmetric matrix, falling back" << endl;
+        if (debug)
+        {
+            Info << "DIASymGaussSeidel: asymmetric matrix, falling back" << endl;
+        }
     }
 
     if (useDIA_ && nCells == 125000) // only log on finest level of your test case
     {
-        Info << "DEBUG: first 5 entries of upperCoeffFieldI_: ";
-        for (label i = 0; i < 5; i++)
-            Info << upperCoeffFieldI_[i] << " ";
-        Info << endl;
-        // same for J and K
-        Info << "DEBUG: first 5 entries of upperCoeffFieldJ_: ";
-        for (label i = 0; i < 5; i++)
-            Info << upperCoeffFieldJ_[i] << " ";
-        Info << endl;
-        Info << "DEBUG: first 5 entries of upperCoeffFieldK_: ";
-        for (label i = 0; i < 5; i++)
-            Info << upperCoeffFieldK_[i] << " ";
-        Info << endl;
+        if (debug)
+        {
+            Info << "DEBUG: first 5 entries of upperCoeffFieldI_: ";
+            for (label i = 0; i < 5; i++)
+                Info << upperCoeffFieldI_[i] << " ";
+            Info << endl;
+            // same for J and K
+            Info << "DEBUG: first 5 entries of upperCoeffFieldJ_: ";
+            for (label i = 0; i < 5; i++)
+                Info << upperCoeffFieldJ_[i] << " ";
+            Info << endl;
+            Info << "DEBUG: first 5 entries of upperCoeffFieldK_: ";
+            for (label i = 0; i < 5; i++)
+                Info << upperCoeffFieldK_[i] << " ";
+            Info << endl;
 
-        Info << "DEBUG: boundary slots (should be 0): "
-             << "upperCoeffFieldI_[" << (Nx_ - 1) << "]=" << upperCoeffFieldI_[Nx_ - 1] << " "
-             << "upperCoeffFieldJ_[" << (Nx_ * (Ny_ - 1)) << "]=" << upperCoeffFieldJ_[Nx_ * (Ny_ - 1)] << " "
-             << "upperCoeffFieldK_[" << (nCells - 1) << "]=" << upperCoeffFieldK_[nCells - 1]
-             << endl;
+            Info << "DEBUG: boundary slots (should be 0): "
+                 << "upperCoeffFieldI_[" << (Nx_ - 1) << "]=" << upperCoeffFieldI_[Nx_ - 1] << " "
+                 << "upperCoeffFieldJ_[" << (Nx_ * (Ny_ - 1)) << "]=" << upperCoeffFieldJ_[Nx_ * (Ny_ - 1)] << " "
+                 << "upperCoeffFieldK_[" << (nCells - 1) << "]=" << upperCoeffFieldK_[nCells - 1]
+                 << endl;
+        }
     }
 }
 
@@ -337,6 +374,11 @@ void Foam::DIASymGaussSeidelSmoother::smooth(
             }
         }
 
+        // ---- Sweep Loop ----
+        static double totalSweepTime = 0.0;
+        static label totalCalls = 0;
+        auto t0 = std::chrono::high_resolution_clock::now();
+        LIKWID_MARKER_START("DIASYMsweep");
         for (label sweep = 0; sweep < nSweeps; sweep++)
         {
             bPrime = source;
@@ -427,6 +469,16 @@ void Foam::DIASymGaussSeidelSmoother::smooth(
                 psiPtr[idx] = psii;
             }
         }
+        LIKWID_MARKER_STOP("DIASYMsweep");
+        auto t1 = std::chrono::high_resolution_clock::now();
+        totalSweepTime += std::chrono::duration<double>(t1 - t0).count();
+        totalCalls++;
+        if (totalCalls % 1000 == 0)
+        {
+            Info << "DIASYMsweep: totalTime=" << totalSweepTime
+                 << "s calls=" << totalCalls << endl;
+        }
+
         // Restore interfaceBouCoeffs_
         forAll(mBouCoeffs, patchi)
         {
@@ -435,6 +487,8 @@ void Foam::DIASymGaussSeidelSmoother::smooth(
                 mBouCoeffs[patchi].negate();
             }
         }
+
+        // LIKWID_MARKER_CLOSE;
     }
     else
     {
